@@ -11,6 +11,14 @@ class Ranks extends ResourceController
     protected $modelName = 'App\Models\RankModel';
     protected $format    = 'json';
 
+    private function idFirst(array $rank): array
+    {
+        $id = $rank['id'];
+        unset($rank['id']);
+
+        return ['id' => $id] + $rank;
+    }
+
     /**
      * Membaca body JSON.
      */
@@ -41,14 +49,16 @@ class Ranks extends ResourceController
 
         if ($q !== '') {
             $builder->groupStart()
-                ->like('rank_name', $q)
-                ->orLike('rank_id', $q)
+                ->like('id', $q)
+                ->orLike('rank_name', $q)
                 ->groupEnd();
         }
 
         $data = $builder
-            ->orderBy('rank_id', 'ASC')
+            ->select('id, rank_name')
+            ->orderBy('id', 'ASC')
             ->findAll();
+        $data = array_map($this->idFirst(...), $data);
 
         return $this->respond([
             'status'  => 200,
@@ -69,12 +79,14 @@ class Ranks extends ResourceController
             (int) $id < 1
         ) {
             return $this->fail(
-                'rank_id harus berupa bilangan bulat positif.',
+                'id harus berupa bilangan bulat positif.',
                 400
             );
         }
 
-        $data = $this->model->find((int) $id);
+        $data = $this->model
+            ->select('id, rank_name')
+            ->find((int) $id);
 
         if (! $data) {
             return $this->failNotFound(
@@ -85,7 +97,7 @@ class Ranks extends ResourceController
         return $this->respond([
             'status'  => 200,
             'message' => 'Detail rank berhasil diambil.',
-            'data'    => $data,
+            'data'    => $this->idFirst($data),
         ]);
     }
 
@@ -103,7 +115,7 @@ class Ranks extends ResourceController
             );
         }
 
-        // rank_id dibuat otomatis oleh database.
+        // ID dibuat otomatis oleh database.
         $rankName = trim((string) ($input['rank_name'] ?? ''));
 
         if ($rankName === '') {
@@ -129,7 +141,9 @@ class Ranks extends ResourceController
         return $this->respondCreated([
             'status'  => 201,
             'message' => 'Rank berhasil ditambahkan.',
-            'data'    => $this->model->find($id),
+            'data'    => $this->idFirst(
+                $this->model->select('id, rank_name')->find($id)
+            ),
         ]);
     }
 
@@ -145,14 +159,14 @@ class Ranks extends ResourceController
             (int) $id < 1
         ) {
             return $this->fail(
-                'rank_id harus berupa bilangan bulat positif.',
+                'id harus berupa bilangan bulat positif.',
                 400
             );
         }
 
         $id = (int) $id;
 
-        if (! $this->model->find($id)) {
+        if (! $this->model->select('id')->find($id)) {
             return $this->failNotFound(
                 "Rank dengan ID {$id} tidak ditemukan."
             );
@@ -188,7 +202,9 @@ class Ranks extends ResourceController
         return $this->respond([
             'status'  => 200,
             'message' => 'Rank berhasil diperbarui.',
-            'data'    => $this->model->find($id),
+            'data'    => $this->idFirst(
+                $this->model->select('id, rank_name')->find($id)
+            ),
         ]);
     }
 
@@ -203,14 +219,14 @@ class Ranks extends ResourceController
             (int) $id < 1
         ) {
             return $this->fail(
-                'rank_id harus berupa bilangan bulat positif.',
+                'id harus berupa bilangan bulat positif.',
                 400
             );
         }
 
         $id = (int) $id;
 
-        if (! $this->model->find($id)) {
+        if (! $this->model->select('id')->find($id)) {
             return $this->failNotFound(
                 "Rank dengan ID {$id} tidak ditemukan."
             );

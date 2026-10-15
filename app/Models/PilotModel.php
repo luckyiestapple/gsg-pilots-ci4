@@ -7,13 +7,13 @@ use CodeIgniter\Model;
 class PilotModel extends Model
 {
     protected $table            = 'pilots';
-    protected $primaryKey       = 'pilot_id';
-    protected $useAutoIncrement = false; // pilot_id berupa teks, misalnya GVG024
+    protected $primaryKey       = 'id';
+    protected $useAutoIncrement = true;
     protected $returnType       = 'array';
     protected $allowedFields    = [
         'pilot_id',
         'name',
-        'country_code',
+        'country_id',
         'rank_id',
         'pirep_filed',
         'flight_minutes',
@@ -25,8 +25,12 @@ class PilotModel extends Model
      */
     public function withRelations(): static
     {
-        return $this->select('pilots.*, countries.country_name, ranks.rank_name')
-            ->join('countries', 'countries.country_code = pilots.country_code', 'left')
-            ->join('ranks', 'ranks.rank_id = pilots.rank_id', 'left');
+        return $this->select(
+            'pilots.id, pilots.pilot_id, pilots.name, pilots.country_id, '
+                . 'pilots.rank_id, pilots.pirep_filed, pilots.flight_minutes, '
+                . 'countries.country_code, countries.country_name, ranks.rank_name'
+        )
+            ->join('countries', 'countries.id = pilots.country_id', 'left')
+            ->join('ranks', 'ranks.id = pilots.rank_id', 'left');
     }
 }

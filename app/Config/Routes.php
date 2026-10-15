@@ -27,6 +27,7 @@ $routes->get('dbtest', 'Pilots::dbtest');
 $routes->resource('api/pilots', [
     'controller' => 'Api\Pilots',
     'only'       => ['index', 'show', 'create', 'update', 'delete'],
+    'placeholder' => '[0-9]+',
 ]);
 
 
@@ -37,6 +38,7 @@ $routes->resource('api/pilots', [
 $routes->resource('api/countries', [
     'controller' => 'Api\Countries',
     'only'       => ['index', 'show', 'create', 'update', 'delete'],
+    'placeholder' => '[0-9]+',
 ]);
 
 
@@ -47,4 +49,5 @@ $routes->resource('api/countries', [
 $routes->resource('api/ranks', [
     'controller' => 'Api\Ranks',
     'only'       => ['index', 'show', 'create', 'update', 'delete'],
+    'placeholder' => '[0-9]+',
 ]);

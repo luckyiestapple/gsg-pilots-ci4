@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\HTTP\Exceptions\HTTPException;
 use CodeIgniter\RESTful\ResourceController;
 
@@ -9,6 +10,23 @@ class Countries extends ResourceController
 {
     protected $modelName = 'App\Models\CountryModel';
     protected $format    = 'json';
+
+    private function parseId($id): ?int
+    {
+        if (filter_var($id, FILTER_VALIDATE_INT) === false || (int) $id < 1) {
+            return null;
+        }
+
+        return (int) $id;
+    }
+
+    private function idFirst(array $country): array
+    {
+        $id = $country['id'];
+        unset($country['id']);
+
+        return ['id' => $id] + $country;
+    }
 
     /**
      * Membaca body JSON.
@@ -33,8 +51,7 @@ class Countries extends ResourceController
      * GET /api/countries
      * GET /api/countries?q=indo
      *
-     * Menampilkan semua negara atau mencari berdasarkan
-     * country_code dan country_name.
+     * Menampilkan semua negara atau mencari berdasarkan id, kode, dan nama.
      */
     public function index()
     {
@@ -44,14 +61,17 @@ class Countries extends ResourceController
 
         if ($q !== '') {
             $builder->groupStart()
-                ->like('country_code', $q)
+                ->like('id', $q)
+                ->orLike('country_code', $q)
                 ->orLike('country_name', $q)
                 ->groupEnd();
         }
 
         $data = $builder
+            ->select('id, country_code, country_name')
             ->orderBy('country_name', 'ASC')
             ->findAll();
+        $data = array_map($this->idFirst(...), $data);
 
         return $this->respond([
             'status'  => 200,
@@ -64,29 +84,30 @@ class Countries extends ResourceController
     /**
      * GET /api/countries/{id}
      *
-     * ID menggunakan country_code, misalnya ID atau US.
+     * ID menggunakan primary key angka.
      */
     public function show($id = null)
     {
-        if ($id === null || trim((string) $id) === '') {
-            return $this->fail(
-                'Kode negara wajib diisi.',
-                400
-            );
+        $id = $this->parseId($id);
+
+        if ($id === null) {
+            return $this->fail('id harus berupa bilangan bulat positif.', 400);
         }
 
-        $data = $this->model->find($id);
+        $data = $this->model
+            ->select('id, country_code, country_name')
+            ->find($id);
 
         if (! $data) {
             return $this->failNotFound(
-                "Negara dengan kode {$id} tidak ditemukan."
+                "Negara dengan ID {$id} tidak ditemukan."
             );
         }
 
         return $this->respond([
             'status'  => 200,
             'message' => 'Detail negara berhasil diambil.',
-            'data'    => $data,
+            'data'    => $this->idFirst($data),
         ]);
     }
 
@@ -128,22 +149,41 @@ class Countries extends ResourceController
             trim((string) $input['country_code'])
         );
 
+        if (
+            strlen($input['country_code']) !== 2 ||
+            ! ctype_alpha($input['country_code'])
+        ) {
+            return $this->fail(
+                'country_code harus terdiri dari 2 huruf.',
+                400
+            );
+        }
+
         $input['country_name'] = trim(
             (string) $input['country_name']
         );
 
-        if (! $this->model->insert($input)) {
-            return $this->failValidationErrors(
-                $this->model->errors()
+        try {
+            if (! $this->model->insert($input)) {
+                return $this->failValidationErrors(
+                    $this->model->errors()
+                );
+            }
+        } catch (DatabaseException $e) {
+            return $this->fail(
+                'Negara gagal ditambahkan. country_code mungkin sudah digunakan.',
+                409
             );
         }
 
-        $code = $input['country_code'];
+        $id = (int) $this->model->getInsertID();
 
         return $this->respondCreated([
             'status'  => 201,
             'message' => 'Negara berhasil ditambahkan.',
-            'data'    => $this->model->find($code),
+            'data'    => $this->idFirst(
+                $this->model->select('id, country_code, country_name')->find($id)
+            ),
         ]);
     }
 
@@ -152,22 +192,23 @@ class Countries extends ResourceController
      * PATCH /api/countries/{id}
      *
      * Memperbarui data negara.
-     * country_code sebagai primary key tidak dapat diubah.
+     * ID dan country_code tidak dapat diubah.
      */
     public function update($id = null)
     {
-        if ($id === null || trim((string) $id) === '') {
-            return $this->fail(
-                'Kode negara wajib diisi.',
-                400
-            );
+        $id = $this->parseId($id);
+
+        if ($id === null) {
+            return $this->fail('id harus berupa bilangan bulat positif.', 400);
         }
 
-        $existing = $this->model->find($id);
+        $existing = $this->model
+            ->select('id, country_code, country_name')
+            ->find($id);
 
         if (! $existing) {
             return $this->failNotFound(
-                "Negara dengan kode {$id} tidak ditemukan."
+                "Negara dengan ID {$id} tidak ditemukan."
             );
         }
 
@@ -181,7 +222,7 @@ class Countries extends ResourceController
         }
 
         // Jangan izinkan perubahan primary key.
-        unset($input['country_code']);
+        unset($input['id'], $input['country_code']);
 
         // Abaikan field yang tidak dikenal.
         $input = array_intersect_key($input, array_flip([
@@ -217,27 +258,28 @@ class Countries extends ResourceController
         return $this->respond([
             'status'  => 200,
             'message' => 'Negara berhasil diperbarui.',
-            'data'    => $this->model->find($id),
+            'data'    => $this->idFirst(
+                $this->model->select('id, country_code, country_name')->find($id)
+            ),
         ]);
     }
 
     /**
      * DELETE /api/countries/{id}
      *
-     * Menghapus negara berdasarkan country_code.
+     * Menghapus negara berdasarkan id.
      */
     public function delete($id = null)
     {
-        if ($id === null || trim((string) $id) === '') {
-            return $this->fail(
-                'Kode negara wajib diisi.',
-                400
-            );
+        $id = $this->parseId($id);
+
+        if ($id === null) {
+            return $this->fail('id harus berupa bilangan bulat positif.', 400);
         }
 
-        if (! $this->model->find($id)) {
+        if (! $this->model->select('id')->find($id)) {
             return $this->failNotFound(
-                "Negara dengan kode {$id} tidak ditemukan."
+                "Negara dengan ID {$id} tidak ditemukan."
             );
         }
 
@@ -253,14 +295,14 @@ class Countries extends ResourceController
         } catch (\CodeIgniter\Database\Exceptions\DatabaseException $e) {
             // Negara mungkin masih direferensikan oleh tabel pilots.
             return $this->fail(
-                'Negara tidak dapat dihapus. Pastikan negara ini tidak digunakan oleh data pilot.',
+                'Negara tidak dapat dihapus karena masih digunakan oleh data pilot.',
                 409
             );
         }
 
         return $this->respondDeleted([
             'status'  => 200,
-            'message' => "Negara dengan kode {$id} berhasil dihapus.",
+            'message' => "Negara dengan ID {$id} berhasil dihapus.",
         ]);
     }
 }

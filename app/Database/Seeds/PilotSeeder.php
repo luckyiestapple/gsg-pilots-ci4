@@ -8,106 +8,49 @@ class PilotSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Data countries
         $countries = [
             ['country_code' => 'IT', 'country_name' => 'Italy'],
             ['country_code' => 'ID', 'country_name' => 'Indonesia'],
             ['country_code' => 'DE', 'country_name' => 'Germany'],
         ];
-
         $this->db->table('countries')->insertBatch($countries);
 
-        // 2. Data ranks
-        $ranks = [
-            ['rank_id' => 1, 'rank_name' => 'Garuda Supreme'],
-        ];
+        $countryIds = array_column(
+            $this->db->table('countries')->select('id, country_code')->get()->getResultArray(),
+            'id',
+            'country_code'
+        );
 
-        $this->db->table('ranks')->insertBatch($ranks);
+        $this->db->table('ranks')->insert([
+            'rank_name' => 'Garuda Supreme',
+        ]);
+        $rankId = (int) $this->db->insertID();
 
-        // 3. Data pilots
         $pilots = [
-            [
-                'pilot_id' => 'GVG024',
-                'name' => 'Raiii',
-                'country_code' => 'IT',
-                'pirep_filed' => 1096,
-                'flight_minutes' => 961255,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG114',
-                'name' => 'Rulizal Al Hafizh',
-                'country_code' => 'ID',
-                'pirep_filed' => 1205,
-                'flight_minutes' => 574190,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG122',
-                'name' => 'Farel Akasya',
-                'country_code' => 'ID',
-                'pirep_filed' => 206,
-                'flight_minutes' => 522750,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG132',
-                'name' => 'Mochamad fachri',
-                'country_code' => 'ID',
-                'pirep_filed' => 368,
-                'flight_minutes' => 403526,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG008',
-                'name' => 'Astralis',
-                'country_code' => 'DE',
-                'pirep_filed' => 161,
-                'flight_minutes' => 401444,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG012',
-                'name' => 'Fadzlan Ferdiansyah',
-                'country_code' => 'ID',
-                'pirep_filed' => 277,
-                'flight_minutes' => 393687,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG104',
-                'name' => 'Muhammad Fauzan',
-                'country_code' => 'ID',
-                'pirep_filed' => 246,
-                'flight_minutes' => 383765,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG002',
-                'name' => 'Aditprtm',
-                'country_code' => 'ID',
-                'pirep_filed' => 142,
-                'flight_minutes' => 324841,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG174',
-                'name' => 'I Gede Wirya',
-                'country_code' => 'ID',
-                'pirep_filed' => 288,
-                'flight_minutes' => 303105,
-                'rank_id' => 1,
-            ],
-            [
-                'pilot_id' => 'GVG137',
-                'name' => 'Darmawan',
-                'country_code' => 'ID',
-                'pirep_filed' => 673,
-                'flight_minutes' => 293724,
-                'rank_id' => 1,
-            ],
+            ['GVG024', 'Raiii', 'IT', 1096, 961255],
+            ['GVG114', 'Rulizal Al Hafizh', 'ID', 1205, 574190],
+            ['GVG122', 'Farel Akasya', 'ID', 206, 522750],
+            ['GVG132', 'Mochamad fachri', 'ID', 368, 403526],
+            ['GVG008', 'Astralis', 'DE', 161, 401444],
+            ['GVG012', 'Fadzlan Ferdiansyah', 'ID', 277, 393687],
+            ['GVG104', 'Muhammad Fauzan', 'ID', 246, 383765],
+            ['GVG002', 'Aditprtm', 'ID', 142, 324841],
+            ['GVG174', 'I Gede Wirya', 'ID', 288, 303105],
+            ['GVG137', 'Darmawan', 'ID', 673, 293724],
         ];
 
-        $this->db->table('pilots')->insertBatch($pilots);
+        $rows = [];
+        foreach ($pilots as [$pilotId, $name, $countryCode, $pireps, $minutes]) {
+            $rows[] = [
+                'pilot_id'       => $pilotId,
+                'name'           => $name,
+                'country_id'     => (int) $countryIds[$countryCode],
+                'pirep_filed'    => $pireps,
+                'flight_minutes' => $minutes,
+                'rank_id'        => $rankId,
+            ];
+        }
+
+        $this->db->table('pilots')->insertBatch($rows);
     }
 }

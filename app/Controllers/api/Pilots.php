@@ -35,11 +35,20 @@ class Pilots extends ResourceController
         return array_intersect_key($input, array_flip([
             'pilot_id',
             'name',
-            'country_code',
+            'country_id',
             'rank_id',
             'pirep_filed',
             'flight_minutes',
         ]));
+    }
+
+    private function parseId($id): ?int
+    {
+        if (filter_var($id, FILTER_VALIDATE_INT) === false || (int) $id < 1) {
+            return null;
+        }
+
+        return (int) $id;
     }
 
     /**
@@ -49,7 +58,10 @@ class Pilots extends ResourceController
         array $input,
         bool $creating = true
     ): ?string {
-        if ($creating && empty($input['pilot_id'])) {
+        if (
+            $creating &&
+            empty(trim((string) ($input['pilot_id'] ?? '')))
+        ) {
             return 'pilot_id wajib diisi.';
         }
 
@@ -60,29 +72,29 @@ class Pilots extends ResourceController
             return 'name wajib diisi.';
         }
 
-        if (
-            $creating &&
-            empty(trim((string) ($input['country_code'] ?? '')))
-        ) {
-            return 'country_code wajib diisi.';
+        if ($creating && ! isset($input['country_id'])) {
+            return 'country_id wajib diisi.';
         }
 
-        if (
-            $creating &&
-            ! isset($input['rank_id'])
-        ) {
+        if ($creating && ! isset($input['rank_id'])) {
             return 'rank_id wajib diisi.';
         }
 
-        foreach (['pirep_filed', 'flight_minutes', 'rank_id'] as $field) {
+        foreach (
+            ['country_id', 'rank_id', 'pirep_filed', 'flight_minutes'] as $field
+        ) {
             if (
                 array_key_exists($field, $input) &&
                 (
                     filter_var($input[$field], FILTER_VALIDATE_INT) === false ||
-                    (int) $input[$field] < 0
+                    (int) $input[$field] < (
+                        in_array($field, ['country_id', 'rank_id'], true) ? 1 : 0
+                    )
                 )
             ) {
-                return "{$field} harus berupa bilangan bulat positif atau nol.";
+                return in_array($field, ['country_id', 'rank_id'], true)
+                    ? "{$field} harus berupa bilangan bulat positif."
+                    : "{$field} harus berupa bilangan bulat positif atau nol.";
             }
         }
 
@@ -96,11 +108,6 @@ class Pilots extends ResourceController
             return 'name tidak boleh kosong.';
         }
 
-        if (isset($input['country_code']) &&
-            strlen(trim((string) $input['country_code'])) !== 2) {
-            return 'country_code harus terdiri dari 2 karakter.';
-        }
-
         return null;
     }
 
@@ -111,7 +118,7 @@ class Pilots extends ResourceController
     {
         $data = $this->model
             ->withRelations()
-            ->where('pilots.pilot_id', $id)
+            ->where('pilots.id', $id)
             ->first();
 
         return $data ?: null;
@@ -129,16 +136,17 @@ class Pilots extends ResourceController
 
         if ($q !== '') {
             $builder->groupStart()
-                ->like('pilots.pilot_id', $q)
+                ->like('pilots.id', $q)
+                ->orLike('pilots.pilot_id', $q)
                 ->orLike('pilots.name', $q)
                 ->orLike('countries.country_name', $q)
-                ->orLike('pilots.country_code', $q)
+                ->orLike('countries.country_code', $q)
                 ->orLike('ranks.rank_name', $q)
                 ->groupEnd();
         }
 
         $data = $builder
-            ->orderBy('pilots.pilot_id', 'ASC')
+            ->orderBy('pilots.id', 'ASC')
             ->findAll();
 
         return $this->respond([
@@ -154,8 +162,10 @@ class Pilots extends ResourceController
      */
     public function show($id = null)
     {
-        if ($id === null || trim((string) $id) === '') {
-            return $this->fail('pilot_id wajib diisi.', 400);
+        $id = $this->parseId($id);
+
+        if ($id === null) {
+            return $this->fail('id harus berupa bilangan bulat positif.', 400);
         }
 
         $data = $this->findPilot($id);
@@ -197,9 +207,8 @@ class Pilots extends ResourceController
 
         $input['pilot_id'] = trim((string) $input['pilot_id']);
         $input['name'] = trim((string) $input['name']);
-        $input['country_code'] = strtoupper(
-            trim((string) $input['country_code'])
-        );
+        $input['country_id'] = (int) $input['country_id'];
+        $input['rank_id'] = (int) $input['rank_id'];
 
         try {
             if (! $this->model->insert($input)) {
@@ -209,15 +218,17 @@ class Pilots extends ResourceController
             }
         } catch (DatabaseException $e) {
             return $this->fail(
-                'Pilot gagal ditambahkan. Periksa apakah pilot_id sudah digunakan dan country_code serta rank_id tersedia.',
+                'Pilot gagal ditambahkan. Periksa apakah pilot_id sudah digunakan serta country_id dan rank_id tersedia.',
                 409
             );
         }
 
+        $id = (int) $this->model->getInsertID();
+
         return $this->respondCreated([
             'status'  => 201,
             'message' => 'Pilot berhasil ditambahkan.',
-            'data'    => $this->findPilot($input['pilot_id']),
+            'data'    => $this->findPilot($id),
         ]);
     }
 
@@ -227,8 +238,10 @@ class Pilots extends ResourceController
      */
     public function update($id = null)
     {
-        if ($id === null || trim((string) $id) === '') {
-            return $this->fail('pilot_id wajib diisi.', 400);
+        $id = $this->parseId($id);
+
+        if ($id === null) {
+            return $this->fail('id harus berupa bilangan bulat positif.', 400);
         }
 
         $existing = $this->model->find($id);
@@ -248,8 +261,8 @@ class Pilots extends ResourceController
             );
         }
 
-        // ID pilot tidak diubah melalui endpoint ini.
-        unset($input['pilot_id']);
+        // Identifiers are immutable through this endpoint.
+        unset($input['id'], $input['pilot_id']);
 
         $input = $this->allowedInput($input);
 
@@ -270,10 +283,10 @@ class Pilots extends ResourceController
             $input['name'] = trim((string) $input['name']);
         }
 
-        if (isset($input['country_code'])) {
-            $input['country_code'] = strtoupper(
-                trim((string) $input['country_code'])
-            );
+        foreach (['country_id', 'rank_id'] as $field) {
+            if (isset($input[$field])) {
+                $input[$field] = (int) $input[$field];
+            }
         }
 
         try {
@@ -284,7 +297,7 @@ class Pilots extends ResourceController
             }
         } catch (DatabaseException $e) {
             return $this->fail(
-                'Pilot gagal diperbarui. Periksa country_code dan rank_id yang dikirim.',
+                'Pilot gagal diperbarui. Periksa country_id dan rank_id yang dikirim.',
                 409
             );
         }
@@ -301,8 +314,10 @@ class Pilots extends ResourceController
      */
     public function delete($id = null)
     {
-        if ($id === null || trim((string) $id) === '') {
-            return $this->fail('pilot_id wajib diisi.', 400);
+        $id = $this->parseId($id);
+
+        if ($id === null) {
+            return $this->fail('id harus berupa bilangan bulat positif.', 400);
         }
 
         if (! $this->model->find($id)) {
