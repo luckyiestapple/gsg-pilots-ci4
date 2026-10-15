@@ -11,4 +11,8 @@ class CountryModel extends Model
     protected $useAutoIncrement = false;
     protected $returnType       = 'array';
     protected $allowedFields    = ['country_code', 'country_name'];
-}
+    protected $validationRules = [
+        'country_code' => 'required|alpha|exact_length[2]|',
+        'country_name' => 'required',
+    ];
+ }
